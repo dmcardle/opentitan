@@ -17,7 +17,7 @@ set_property BITSTREAM.CONFIG.USR_ACCESS TIMESTAMP [current_design]
 
 # Dump MMI for Boot ROM.
 
-proc generate_mmi {filename brams designtask_count} {
+proc generate_mmi {filename brams loc_prefix designtask_count} {
     send_msg "${designtask_count}-1" INFO "Dumping MMI to ${filename}"
 
     set workroot [file dirname [info script]]
@@ -34,9 +34,9 @@ proc generate_mmi {filename brams designtask_count} {
         }
         # The scrambled Boot ROM is actually 39 bits wide but the updatemem tool segfaults
         # for slice sizes not divisible by 8.
-        if {[expr {($slice_end - $slice_begin + 1) < 8}]} {
-            set slice_end [expr {$slice_begin + 7}]
-        }
+        #if {[expr {($slice_end - $slice_begin + 1) < 8}]} {
+        #    set slice_end [expr {$slice_begin + 7}]
+        #}
         set addr_begin [get_property ram_addr_begin [get_cells $inst]]
         set addr_end [get_property ram_addr_end [get_cells $inst]]
         if {$addr_begin eq {} || $addr_end eq {}} {
@@ -51,20 +51,25 @@ proc generate_mmi {filename brams designtask_count} {
     puts $fileout "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
     puts $fileout "<MemInfo Version=\"1\" Minor=\"0\">"
     puts $fileout "  <Processor Endianness=\"Little\" InstPath=\"dummy\">"
-    puts $fileout "  <AddressSpace Name=\"rom\" Begin=\"0\" End=\"$space\">"
+    puts $fileout "  <AddressSpace Name=\"dummy\" Begin=\"0\" End=\"$space\">"
     puts $fileout "      <BusBlock>"
 
     set part [get_property PART [current_design]]
+    # I was suspicious, but `lsort -dictionary` does seem to sort in ascending
+    # numerical order.
+    #
+    # TODO(dmcardle) Determine whether ascending numerical order matches the
+    # hardware, and whether it matches the VMEM file.
     foreach inst [lsort -dictionary $brams] {
         set loc [get_property LOC [get_cells $inst]]
-        set loc [string trimleft $loc RAMB36_]
+        set loc [string trimleft $loc $loc_prefix]
         set slice_begin [get_property ram_slice_begin [get_cells $inst]]
         set slice_end [get_property ram_slice_end [get_cells $inst]]
         # The scrambled Boot ROM is actually 39 bits wide but the updatemem tool segfaults
         # for slice sizes not divisible by 4.
-        if {[expr {($slice_end - $slice_begin + 1) < 4}]} {
-            set slice_end [expr {$slice_begin + 3}]
-        }
+        #if {[expr {($slice_end - $slice_begin + 1) < 4}]} {
+        #    set slice_end [expr {$slice_begin + 3}]
+        #}
         set addr_begin [get_property ram_addr_begin [get_cells $inst]]
         set addr_end [get_property ram_addr_end [get_cells $inst]]
         puts $fileout "        <BitLane MemType=\"RAMB32\" Placement=\"$loc\">"
@@ -85,7 +90,7 @@ proc generate_mmi {filename brams designtask_count} {
 }
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_rom_ctrl*}] " "]
-generate_mmi "rom.mmi" $brams 1
+generate_mmi "rom.mmi" $brams "RAMB36_" 1
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_otp_ctrl*}] " "]
-generate_mmi "otp.mmi" $brams 2
+generate_mmi "otp.mmi" $brams "RAMB18_" 2
