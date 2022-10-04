@@ -39,7 +39,7 @@ def _otp_json_impl(ctx):
                 # ROM execution is enabled if this item is set to a non-zero
                 # value.
                 #"CREATOR_SW_CFG_ROM_EXEC_EN": "0xffffffff",
-                "CREATOR_SW_CFG_ROM_EXEC_EN": "0x11235813",
+                "CREATOR_SW_CFG_ROM_EXEC_EN": "0x0",
                 # Value to write to the cpuctrl CSR in `rom_init()`.
                 # See:
                 # https://ibex-core.readthedocs.io/en/latest/03_reference/cs_registers.html#cpu-control-register-cpuctrl
