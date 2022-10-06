@@ -32,10 +32,10 @@ proc generate_mmi {filename brams addr_space_name mem_type loc_prefix designtask
         if {$slice_begin eq {} || $slice_end eq {}} {
             send_msg "${designtask_count}-2" ERROR "Extraction of ${filename} information failed."
         }
-        puts $fileout ""
-        puts $fileout "<!-- inst = $inst -->"
-        puts $fileout "<!-- slice_begin = $slice_begin -->"
-        puts $fileout "<!-- slice_end   = $slice_end -->"
+        # puts $fileout ""
+        # puts $fileout "<!-- inst = $inst -->"
+        # puts $fileout "<!-- slice_begin = $slice_begin -->"
+        # puts $fileout "<!-- slice_end   = $slice_end -->"
 
         # The scrambled Boot ROM is actually 39 bits wide but the updatemem tool segfaults
         # for slice sizes not divisible by 8.
@@ -48,12 +48,12 @@ proc generate_mmi {filename brams addr_space_name mem_type loc_prefix designtask
             send_msg "${designtask_count}-3" ERROR "Extraction of ${filename} MMI information failed."
         }
 
-        puts $fileout "<!-- addr_begin = $addr_begin -->"
-        puts $fileout "<!-- addr_end   = $addr_end -->"
+        # puts $fileout "<!-- addr_begin = $addr_begin -->"
+        # puts $fileout "<!-- addr_end   = $addr_end -->"
 
         # Calculate total number of bits.
         set space [expr {$space + ($addr_end - $addr_begin + 1) * ($slice_end - $slice_begin + 1)}]
-        puts $fileout "<!-- space := $space -->"
+        # puts $fileout "<!-- space := $space -->"
     }
 
     # Generate the MMI.
@@ -100,8 +100,8 @@ proc generate_mmi {filename brams addr_space_name mem_type loc_prefix designtask
 }
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_rom_ctrl*}] " "]
-generate_mmi "rom.mmi" $brams "rom_addr_space" "RAMB32" "RAMB36_" 1
+generate_mmi "rom.mmi" $brams "rom" "RAMB32" "RAMB36_" 1
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_otp_ctrl*}] " "]
 #generate_mmi "otp.mmi" $brams "otp_addr_space" "RAMB18" "RAMB18_" 2
-generate_mmi "otp.mmi" $brams "otp_addr_space" "RAMB32" "RAMB18_" 2
+generate_mmi "otp.mmi" $brams "rom" "RAMB32" "RAMB18_" 2

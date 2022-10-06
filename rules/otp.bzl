@@ -17,6 +17,7 @@ def _otp_json_impl(ctx):
     # Seed to be used for generation of partition randomized values.
     # Can be overridden by the OTP image generation tool.
     otp["seed"] = "01931961561863975174"
+    print(ctx.attr)
 
     # Assemble all OTP paritions
     # The partition and item names must correspond with the OTP memory map.
@@ -38,8 +39,7 @@ def _otp_json_impl(ctx):
                 "CREATOR_SW_CFG_RNG_EN": "0x739",
                 # ROM execution is enabled if this item is set to a non-zero
                 # value.
-                #"CREATOR_SW_CFG_ROM_EXEC_EN": "0xffffffff",
-                "CREATOR_SW_CFG_ROM_EXEC_EN": "0x0",
+                "CREATOR_SW_CFG_ROM_EXEC_EN": ctx.attr.creator_sw_cfg_rom_exec_en,
                 # Value to write to the cpuctrl CSR in `rom_init()`.
                 # See:
                 # https://ibex-core.readthedocs.io/en/latest/03_reference/cs_registers.html#cpu-control-register-cpuctrl
@@ -186,6 +186,7 @@ otp_json = rule(
         # definition file (default: hw/ip/lc_ctrl/data/lc_ctrl_state.hjson)
         "lc_state": attr.string(doc = "Life cycle state", default = "RMA"),
         "lc_count": attr.int(doc = "Life cycle count", default = 8),
+        "creator_sw_cfg_rom_exec_en": attr.string(default = "0xffffffff"),
     },
 )
 

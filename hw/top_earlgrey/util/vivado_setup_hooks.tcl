@@ -21,3 +21,5 @@ set_property STEPS.OPT_DESIGN.TCL.POST "${workroot}/vivado_hook_opt_design_post.
 
 # As workaround, we use the post route design hook, which gets called.
 set_property STEPS.ROUTE_DESIGN.TCL.POST "${workroot}/vivado_hook_write_bitstream_pre.tcl" [get_runs impl_1]
+
+set_property STEPS.WRITE_BITSTREAM.TCL.PRE "${workroot}/vivado_hook_write_bitstream_pre2.tcl" [get_runs impl_1]

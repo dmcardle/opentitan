@@ -89,6 +89,14 @@ bitstream_splice(
     tags = ["manual"],
 )
 
+bitstream_splice(
+    name = "fpga_cw310_rom_exec_disabled",
+    src = ":fpga_cw310_rom",
+    data = "//hw/ip/otp_ctrl/data:img_otp_exec_disabled",
+    meminfo = ":otp_mmi",
+    tags = ["manual"],
+)
+
 # Standalone CW310 image for use with hyperdebug.
 fusesoc_build(
     name = "fpga_cw310_hyperdebug",

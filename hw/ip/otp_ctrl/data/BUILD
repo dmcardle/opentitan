@@ -37,6 +37,16 @@ otp_image(
     src = ":otp_ctrl_dev_json",
 )
 
+otp_json(
+    name = "otp_exec_disabled_json",
+    creator_sw_cfg_rom_exec_en = "0x0",
+)
+
+otp_image(
+    name = "img_otp_exec_disabled",
+    src = ":otp_exec_disabled_json",
+)
+
 filegroup(
     name = "all_files",
     srcs = glob(["**"]),

@@ -128,9 +128,8 @@ opentitan_gdb_fpga_cw310_test(
         ":sram_program_fpga_cw310.elf": "sram_program.elf",
         "//sw/device/silicon_creator/rom:rom_fpga_cw310.elf": "rom.elf",
     },
-    rom_bitstream = "//hw/bitstream:rom",
-    #rom_bitstream = "//hw/bitstream:rom_otp_dev",
-    #rom_bitstream = "//hw/bitstream/vivado:fpga_cw310_rom",
+    #rom_bitstream = "//hw/bitstream:rom",
+    rom_bitstream = "//hw/bitstream/vivado:fpga_cw310_rom_exec_disabled",
     rom_kind = "Rom",
     tags = [
         "flaky",
