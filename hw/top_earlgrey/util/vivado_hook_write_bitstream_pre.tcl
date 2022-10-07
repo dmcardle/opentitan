@@ -59,7 +59,7 @@ proc generate_mmi {filename brams addr_space_name mem_type loc_prefix designtask
     # Generate the MMI.
     set space [expr {($space / 8) - 1}]
     puts $fileout "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
-    puts $fileout "<MemInfo Version=\"1\" Minor=\"0\">"
+    puts $fileout "<MemInfo Version=\"1\" Minor=\"1\">"
     puts $fileout "  <Processor Endianness=\"Little\" InstPath=\"dummy\">"
     puts $fileout "  <AddressSpace Name=\"$addr_space_name\" Begin=\"0\" End=\"$space\">"
     puts $fileout "      <BusBlock>"
@@ -100,8 +100,7 @@ proc generate_mmi {filename brams addr_space_name mem_type loc_prefix designtask
 }
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_rom_ctrl*}] " "]
-generate_mmi "rom.mmi" $brams "rom" "RAMB32" "RAMB36_" 1
+generate_mmi "rom.mmi" $brams "rom" "RAMB36" "RAMB36_" 1
 
 set brams [split [get_cells -hierarchical -filter { PRIMITIVE_TYPE =~ BMEM.bram.* && NAME =~ *u_otp_ctrl*}] " "]
-#generate_mmi "otp.mmi" $brams "otp_addr_space" "RAMB18" "RAMB18_" 2
-generate_mmi "otp.mmi" $brams "rom" "RAMB32" "RAMB18_" 2
+generate_mmi "otp.mmi" $brams "otp" "RAMB18" "RAMB18_" 2

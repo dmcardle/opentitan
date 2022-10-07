@@ -30,7 +30,7 @@ def _opentitan_gdb_fpga_cw310_test(ctx):
 
         run_opentitantool fpga load-bitstream --rom-kind={rom_kind} rom.bit
 
-        (openocd -d -f /usr/share/openocd/scripts/interface/ftdi/olimex-arm-usb-tiny-h.cfg \\
+        (openocd -f /usr/share/openocd/scripts/interface/ftdi/olimex-arm-usb-tiny-h.cfg \\
             -c "adapter speed 0; transport select jtag; reset_config trst_and_srst" \\
             -f {openocd_earlgrey_config} \\
             |& prefix_lines OPENOCD "$COLOR_PURPLE") &

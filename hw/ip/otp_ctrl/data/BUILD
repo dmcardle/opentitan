@@ -39,7 +39,7 @@ otp_image(
 
 otp_json(
     name = "otp_exec_disabled_json",
-    creator_sw_cfg_rom_exec_en = "0x0",
+    creator_sw_cfg_rom_exec_en = "0x00000000",
 )
 
 otp_image(

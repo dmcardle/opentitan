@@ -40,7 +40,7 @@ def _bitstream_splice_impl(ctx):
     # Turn on support for RAMB18 in `updatemem`. This seems completely
     # undocumented. I only found a reference to it on a Xilinx forum.
     # https://support.xilinx.com/s/question/0D52E00006iHlJXSA0/updating-memories-containing-program-instructions-of-a-picoblaze-processor?language=en_US
-    #splice_env['UPDATEMEM_ALLOW_RAMB18'] = '1'
+    splice_env['UPDATEMEM_ALLOW_RAMB18'] = '1'
 
     ctx.actions.run(
         mnemonic = "SpliceBitstream",
