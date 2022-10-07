@@ -109,6 +109,10 @@ opentitan_gdb_fpga_cw310_test(
         echo :::: Value of CREATOR_SW_CFG_ROM_EXEC_EN.\\n
         monitor mdw 0x40131108
 
+        echo :::: Dump otp_ctrl.SW_CFG_WINDOW.\\n
+        # See hw/top_earlgrey/sw/autogen/top_earlgrey.h
+        x/512xb 0x40131000
+
         echo :::: Load the SRAM program onto the device and check integrity.\\n
         file sram_program.elf
         load sram_program.elf
@@ -130,6 +134,7 @@ opentitan_gdb_fpga_cw310_test(
     },
     #rom_bitstream = "//hw/bitstream:rom",
     rom_bitstream = "//hw/bitstream/vivado:fpga_cw310_rom_exec_disabled",
+    #rom_bitstream = "//hw/bitstream/vivado:fpga_cw310_rom",
     rom_kind = "Rom",
     tags = [
         "flaky",
