@@ -346,30 +346,11 @@ opentitan_functest(
     targets = ["cw310_rom"],
 )
 
-[otp_image(
-    name = "otp_img_e2e_bootstrap_entry_{}".format(lc_state.lower()),
-    src = "//hw/ip/otp_ctrl/data:otp_json_{}".format(lc_state.lower()),
-    overlays = STD_OTP_OVERLAYS,
-) for lc_state in structs.to_dict(CONST.LCV)]
-
-# Splice OTP images into bitstreams
-[
-    bitstream_splice(
-        name = "bitstream_e2e_bootstrap_entry_{}".format(lc_state.lower()),
-        src = "//hw/bitstream:rom",
-        data = ":otp_img_e2e_bootstrap_entry_{}".format(lc_state.lower()),
-        meminfo = "//hw/bitstream:otp_mmi",
-        tags = ["vivado"] + maybe_skip_in_ci(lc_state_val),
-        update_usr_access = True,
-    )
-    for lc_state, lc_state_val in structs.to_dict(CONST.LCV).items()
-]
-
 [
     opentitan_functest(
-        name = "e2e_bootstrap_entry_{}".format(lc_state.lower()),
+        name = "e2e_bootstrap_entry_{}".format(lc_state),
         cw310 = cw310_params(
-            bitstream = ":bitstream_e2e_bootstrap_entry_{}".format(lc_state.lower()),
+            bitstream = "//hw/bitstream:rom_otp_" + lc_state,
             tags = ["vivado"] + maybe_skip_in_ci(lc_state_val),
             test_cmds = [
                 "--rom-kind=rom",
@@ -384,15 +365,14 @@ opentitan_functest(
         signed = False,
         targets = ["cw310_rom"],
         test_harness = "//sw/host/tests/rom/e2e_bootstrap_entry",
-        deps = [":bitstream_e2e_bootstrap_entry_{}".format(lc_state.lower())],
     )
-    for lc_state, lc_state_val in structs.to_dict(CONST.LCV).items()
+    for lc_state, lc_state_val in get_lc_items()
 ]
 
 test_suite(
     name = "rom_e2e_bootstrap_entry",
     tags = ["manual"],
-    tests = [":e2e_bootstrap_entry_{}".format(lc_state.lower()) for lc_state in structs.to_dict(CONST.LCV)],
+    tests = [":e2e_bootstrap_entry_" + lc_state for lc_state, _ in get_lc_items()],
 )
 
 opentitan_functest(
