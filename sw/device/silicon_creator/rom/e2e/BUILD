@@ -695,52 +695,41 @@ BOOT_POLICY_NEWER_CASES = [
     },
 ]
 
-[otp_image(
-    name = "otp_img_boot_policy_newer_{}".format(lc_state.lower()),
-    src = "//hw/ip/otp_ctrl/data:otp_json_{}".format(lc_state.lower()),
-    overlays = STD_OTP_OVERLAYS,
-) for lc_state in structs.to_dict(CONST.LCV)]
-
-# Splice OTP images into bitstreams
 [
-    bitstream_splice(
-        name = "bitstream_boot_policy_newer_{}".format(lc_state.lower()),
-        src = "//hw/bitstream:rom",
-        data = ":otp_img_boot_policy_newer_{}".format(lc_state.lower()),
-        meminfo = "//hw/bitstream:otp_mmi",
-        tags = ["vivado"],
-        update_usr_access = True,
+    opentitan_functest(
+        name = "boot_policy_newer_{}_a_{}_b_{}".format(
+            lc_state,
+            t["a"],
+            t["b"],
+        ),
+        cw310 = cw310_params(
+            bitstream = "//hw/bitstream:rom_otp_" + lc_state,
+            exit_success = t["exit_success"].format(hex(lc_state_val)),
+            tags = ["vivado"] + maybe_skip_in_ci(lc_state_val),
+        ),
+        key = "multislot",
+        ot_flash_binary = ":sec_ver_{}_{}_image".format(
+            t["a"],
+            t["b"],
+        ),
+        targets = ["cw310_rom"],
     )
-    for lc_state in structs.to_dict(CONST.LCV)
+    for lc_state, lc_state_val in get_lc_items()
+    for t in BOOT_POLICY_NEWER_CASES
 ]
-
-[opentitan_functest(
-    name = "boot_policy_newer_{}_a_{}_b_{}".format(
-        lc_state.lower(),
-        t["a"],
-        t["b"],
-    ),
-    cw310 = cw310_params(
-        bitstream = ":bitstream_boot_policy_newer_{}".format(lc_state.lower()),
-        exit_success = t["exit_success"].format(hex(lc_state_val)),
-        tags = ["vivado"] + maybe_skip_in_ci(lc_state_val),
-    ),
-    key = "multislot",
-    ot_flash_binary = ":sec_ver_{}_{}_image".format(
-        t["a"],
-        t["b"],
-    ),
-    targets = ["cw310_rom"],
-) for lc_state, lc_state_val in structs.to_dict(CONST.LCV).items() for t in BOOT_POLICY_NEWER_CASES]
 
 test_suite(
     name = "boot_policy_newer",
     tags = ["manual"],
-    tests = ["boot_policy_newer_{}_a_{}_b_{}".format(
-        lc_state.lower(),
-        t["a"],
-        t["b"],
-    ) for lc_state in structs.to_dict(CONST.LCV) for t in BOOT_POLICY_NEWER_CASES],
+    tests = [
+        "boot_policy_newer_{}_a_{}_b_{}".format(
+            lc_state,
+            t["a"],
+            t["b"],
+        )
+        for lc_state, lc_state_val in get_lc_items()
+        for t in BOOT_POLICY_NEWER_CASES
+    ],
 )
 
 BOOT_POLICY_ROLLBACK_CASES = [
