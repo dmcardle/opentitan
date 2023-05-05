@@ -10,7 +10,8 @@ workspace(name = "lowrisc_opentitan")
 # CRT is the Compiler Repository Toolkit.  It contains the configuration for
 # the windows compiler.
 load("//third_party/crt:repos.bzl", "crt_repos")
-crt_repos()
+crt_repos(local="/home/dan/REPOS/crt")
+#crt_repos()
 load("@crt//:repos.bzl", "crt_repos")
 crt_repos()
 load("@crt//:deps.bzl", "crt_deps")
