@@ -11,8 +11,9 @@ build --conlyopt='-std=gnu11'
 # disassemblies when compilation mode is fastbuild.
 build --strip='never'
 
-# TODO(#12553) Remove these explicit feature enablings once the features in
-# @crt// are enabled by default.
+# TODO(#12553) Remove these explicit feature flags once the features in @crt//
+# are enabled by default.
+build --features=-pedantic_warnings
 build --features=all_warnings
 
 # Enable toolchain hardening features.
