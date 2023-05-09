@@ -15,6 +15,15 @@ build --strip='never'
 # are enabled by default.
 build --features=-pedantic_warnings
 build --features=all_warnings
+build --features=all_warnings_as_errors
+build --features=extra_warnings
+build --features=implicit_conversion_warnings
+build --features=no_unused_function_warning
+build --features=no_gnu_zero_variadic_macro_arguments_warning
+build --features=no_gnu_statement_expression_from_macro_expansion
+build --features=no_missing_field_initializers_warning
+build --features=no_sign_compare_warning
+build --features=no_unused_parameter_warning
 
 # Enable toolchain hardening features.
 # `guards` adds `unimp` guard instructions after unconditional jumps.

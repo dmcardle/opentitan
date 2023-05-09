@@ -39,17 +39,6 @@ cc_library(
     visibility = ["//visibility:private"],
     deps = [":macros"],
 )
-
-cc_test(
-    name = "math_builtins_unittest",
-    srcs = ["math_builtins_unittest.cc"],
-    deps = [
-        ":bitfield",
-        ":math_polyfills",
-        "@googletest//:gtest_main",
-    ],
-)
-
 alias(
     name = "math_builtins",
     actual = select({

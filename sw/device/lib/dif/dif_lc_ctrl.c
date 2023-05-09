@@ -107,7 +107,7 @@ dif_result_t dif_lc_ctrl_get_attempts(const dif_lc_ctrl_t *lc, uint8_t *count) {
   uint32_t reg =
       mmio_region_read32(lc->base_addr, LC_CTRL_LC_TRANSITION_CNT_REG_OFFSET);
   uint8_t value =
-      bitfield_field32_read(reg, LC_CTRL_LC_TRANSITION_CNT_CNT_FIELD);
+      (uint8_t)bitfield_field32_read(reg, LC_CTRL_LC_TRANSITION_CNT_CNT_FIELD);
   if (value == LC_CTRL_LC_TRANSITION_CNT_CNT_MASK) {
     return kDifError;
   }
@@ -217,8 +217,10 @@ dif_result_t dif_lc_ctrl_get_hw_rev(const dif_lc_ctrl_t *lc,
   }
 
   uint32_t reg = mmio_region_read32(lc->base_addr, LC_CTRL_HW_REV_REG_OFFSET);
-  hw_rev->chip_gen = bitfield_field32_read(reg, LC_CTRL_HW_REV_CHIP_GEN_FIELD);
-  hw_rev->chip_rev = bitfield_field32_read(reg, LC_CTRL_HW_REV_CHIP_REV_FIELD);
+  hw_rev->chip_gen =
+      (uint16_t)bitfield_field32_read(reg, LC_CTRL_HW_REV_CHIP_GEN_FIELD);
+  hw_rev->chip_rev =
+      (uint16_t)bitfield_field32_read(reg, LC_CTRL_HW_REV_CHIP_REV_FIELD);
   return kDifOk;
 }
 
