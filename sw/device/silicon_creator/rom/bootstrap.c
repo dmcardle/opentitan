@@ -14,6 +14,16 @@
 #include "hw/top_earlgrey/sw/autogen/top_earlgrey.h"
 #include "otp_ctrl_regs.h"
 
+// This function implements the prototype declared by
+// sw/device/silicon_creator/lib/bootstrap.h
+//
+// It should never be called because we use bootstrap with bounds checks
+// disabled.
+hardened_bool_t bootstrap_bounds_check(spi_device_opcode_t opcode,
+                                       uint32_t page_addr) {
+  OT_UNREACHABLE();
+}
+
 hardened_bool_t bootstrap_requested(void) {
   uint32_t bootstrap_dis =
       otp_read32(OTP_CTRL_PARAM_OWNER_SW_CFG_ROM_BOOTSTRAP_DIS_OFFSET);
@@ -42,5 +52,5 @@ rom_error_t bootstrap(void) {
   }
   HARDENED_CHECK_EQ(requested, kHardenedBoolTrue);
 
-  return enter_bootstrap(/*protect_rom_ext=*/kHardenedBoolFalse);
+  return enter_bootstrap(/*enable_bounds_checks=*/kHardenedBoolFalse);
 }

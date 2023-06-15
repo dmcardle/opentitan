@@ -129,6 +129,8 @@ enum module_ {
   X(kErrorBootstrapProgramAddress,    ERROR_(2, kModuleBootstrap, kInvalidArgument)), \
   X(kErrorBootstrapInvalidState,      ERROR_(3, kModuleBootstrap, kInvalidArgument)), \
   X(kErrorBootstrapNotRequested,      ERROR_(4, kModuleBootstrap, kInternal)), \
+  X(kErrorBootstrapIllegalAddr,       ERROR_(5, kModuleBootstrap, kInternal)), \
+  X(kErrorBootstrapDisabledRomExt,    ERROR_(6, kModuleBootstrap, kInternal)), \
   \
   X(kErrorLogBadFormatSpecifier,      ERROR_(1, kModuleLog, kInternal)), \
   \

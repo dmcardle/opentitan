@@ -4,11 +4,13 @@
 
 #include "sw/device/silicon_creator/lib/bootstrap.h"
 
+#include <assert.h>
 #include <stdalign.h>
+#include <stdint.h>
 
-#include "sw/device/lib/base/abs_mmio.h"
 #include "sw/device/lib/base/bitfield.h"
 #include "sw/device/lib/base/hardened.h"
+#include "sw/device/silicon_creator/lib/base/chip.h"
 #include "sw/device/silicon_creator/lib/drivers/flash_ctrl.h"
 #include "sw/device/silicon_creator/lib/drivers/rstmgr.h"
 #include "sw/device/silicon_creator/lib/drivers/spi_device.h"
@@ -22,6 +24,10 @@ enum {
    */
   kMaxAddress =
       FLASH_CTRL_PARAM_BYTES_PER_BANK * FLASH_CTRL_PARAM_REG_NUM_BANKS,
+  /*
+   * The total number of flash pages.
+   */
+  kNumPages = kMaxAddress / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
 };
 
 static_assert(FLASH_CTRL_PARAM_REG_NUM_BANKS == 2, "Flash must have 2 banks");
@@ -60,12 +66,46 @@ typedef enum bootstrap_state {
 } bootstrap_state_t;
 
 /**
+ * A context object for the bootstrap state machine.
+ */
+typedef struct bootstrap_ctx {
+  bootstrap_state_t state;
+  hardened_bool_t bounds_checks_on;
+} bootstrap_ctx_t;
+
+/**
  * Handles access permissions and erases both data banks of the embedded flash.
  *
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_chip_erase(void) {
+static rom_error_t bootstrap_chip_erase(hardened_bool_t bounds_checks_on) {
+  if (bounds_checks_on == kHardenedBoolTrue) {
+    // Bounds checks are defined at the granularity of pages, so we check
+    // whether individual pages are safe to erase rather than erasing entire
+    // banks at a time.
+    flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
+    rom_error_t last_err = kErrorOk;
+    for (uint32_t i = 0; i < kNumPages; ++i) {
+      const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+      const hardened_bool_t is_addr_ok =
+          bootstrap_bounds_check(kSpiDeviceOpcodeChipErase, addr);
+      if (is_addr_ok != kHardenedBoolTrue) {
+        continue;
+      }
+      HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
+      rom_error_t err = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
+      if (err != kErrorOk) {
+        last_err = err;
+      }
+    }
+    flash_ctrl_bank_erase_perms_set(kHardenedBoolFalse);
+    HARDENED_RETURN_IF_ERROR(last_err);
+    return kErrorOk;
+  }
+
+  HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
+
   flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
   rom_error_t err_0 = flash_ctrl_data_erase(0, kFlashCtrlEraseTypeBank);
   rom_error_t err_1 = flash_ctrl_data_erase(FLASH_CTRL_PARAM_BYTES_PER_BANK,
@@ -84,10 +124,13 @@ static rom_error_t bootstrap_chip_erase(void) {
  * consecutive pages.
  *
  * @param addr Address that falls within the 4 KiB region being deleted.
+ * @param bounds_checks_on Determines whether to erase single pages at a time,
+ * consulting `bootstrap_bounds_check()` for each page.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_sector_erase(uint32_t addr) {
+static rom_error_t bootstrap_sector_erase(uint32_t addr,
+                                          hardened_bool_t bounds_checks_on) {
   static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
                 "Page size must be 2 KiB");
   enum {
@@ -101,6 +144,17 @@ static rom_error_t bootstrap_sector_erase(uint32_t addr) {
     return kErrorBootstrapEraseAddress;
   }
   addr &= kPageAddrMask;
+
+  if (bounds_checks_on == kHardenedBoolTrue) {
+    const hardened_bool_t is_addr_ok =
+        bootstrap_bounds_check(kSpiDeviceOpcodeSectorErase, addr);
+    if (is_addr_ok != kHardenedBoolTrue) {
+      return kErrorBootstrapIllegalAddr;
+    }
+    HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
+  } else {
+    HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
+  }
 
   flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
       .read = kMultiBitBool4False,
@@ -133,11 +187,14 @@ static rom_error_t bootstrap_sector_erase(uint32_t addr) {
  * @param data Data to write, must be word aligned. If `byte_count` is not a
  * multiple of flash word size, `data` must have enough space until the next
  * flash word.
+ * @param bounds_checks_on Determines whether to operate on single pages at a
+ * time, consulting `bootstrap_bounds_check()` for each page.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
 static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
-                                          uint8_t *data) {
+                                          uint8_t *data,
+                                          hardened_bool_t bounds_checks_on) {
   static_assert(__builtin_popcount(FLASH_CTRL_PARAM_BYTES_PER_WORD) == 1,
                 "Bytes per flash word must be a power of two.");
   enum {
@@ -160,6 +217,17 @@ static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
 
   if (addr & kFlashWordMask || addr >= kMaxAddress) {
     return kErrorBootstrapProgramAddress;
+  }
+
+  if (bounds_checks_on == kHardenedBoolTrue) {
+    const hardened_bool_t is_addr_ok =
+        bootstrap_bounds_check(kSpiDeviceOpcodePageProgram, addr);
+    if (is_addr_ok != kHardenedBoolTrue) {
+      return kErrorBootstrapIllegalAddr;
+    }
+    HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
+  } else {
+    HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
   }
 
   // Round up to next flash word and fill missing bytes with `0xff`.
@@ -216,12 +284,12 @@ static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
  * This function erases both data banks of the flash regardless of the type of
  * the erase command (CHIP_ERASE or SECTOR_ERASE).
  *
- * @param state Bootstrap state.
+ * @param[in,out] ctx State machine context.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_erase(bootstrap_state_t *state) {
-  HARDENED_CHECK_EQ(*state, kBootstrapStateErase);
+static rom_error_t bootstrap_handle_erase(bootstrap_ctx_t *ctx) {
+  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateErase);
 
   spi_device_cmd_t cmd;
   RETURN_IF_ERROR(spi_device_cmd_get(&cmd));
@@ -234,9 +302,9 @@ static rom_error_t bootstrap_handle_erase(bootstrap_state_t *state) {
   switch (cmd.opcode) {
     case kSpiDeviceOpcodeChipErase:
     case kSpiDeviceOpcodeSectorErase:
-      error = bootstrap_chip_erase();
+      error = bootstrap_chip_erase(ctx->bounds_checks_on);
       HARDENED_RETURN_IF_ERROR(error);
-      *state = kBootstrapStateEraseVerify;
+      ctx->state = kBootstrapStateEraseVerify;
       // Note: We clear WIP and WEN bits in `bootstrap_handle_erase_verify()`
       // after checking that both data banks have been erased.
       break;
@@ -255,12 +323,38 @@ static rom_error_t bootstrap_handle_erase(bootstrap_state_t *state) {
  *
  * This function also clears the WIP and WEN bits of the flash status register.
  *
- * @param state Bootstrap state.
+ * @param[in,out] ctx State machine context.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_erase_verify(bootstrap_state_t *state) {
-  HARDENED_CHECK_EQ(*state, kBootstrapStateEraseVerify);
+static rom_error_t bootstrap_handle_erase_verify(bootstrap_ctx_t *ctx) {
+  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateEraseVerify);
+
+  if (ctx->bounds_checks_on == kHardenedBoolTrue) {
+    rom_error_t last_err = kErrorOk;
+    for (uint32_t i = 0; i < kNumPages; ++i) {
+      const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+      const hardened_bool_t is_addr_ok =
+          bootstrap_bounds_check(kSpiDeviceOpcodeChipErase, addr);
+      if (is_addr_ok != kHardenedBoolTrue) {
+        continue;
+      }
+      HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
+      rom_error_t err =
+          flash_ctrl_data_erase_verify(addr, kFlashCtrlEraseTypePage);
+      if (err != kErrorOk) {
+        last_err = err;
+      }
+    }
+
+    ctx->state = kBootstrapStateProgram;
+    spi_device_flash_status_clear();
+
+    HARDENED_RETURN_IF_ERROR(last_err);
+    return last_err;
+  }
+
+  HARDENED_CHECK_EQ(ctx->bounds_checks_on, kHardenedBoolFalse);
 
   rom_error_t err_0 = flash_ctrl_data_erase_verify(0, kFlashCtrlEraseTypeBank);
   rom_error_t err_1 = flash_ctrl_data_erase_verify(
@@ -268,7 +362,7 @@ static rom_error_t bootstrap_handle_erase_verify(bootstrap_state_t *state) {
   HARDENED_RETURN_IF_ERROR(err_0);
   HARDENED_RETURN_IF_ERROR(err_1);
 
-  *state = kBootstrapStateProgram;
+  ctx->state = kBootstrapStateProgram;
   spi_device_flash_status_clear();
   return err_0;
 }
@@ -276,11 +370,11 @@ static rom_error_t bootstrap_handle_erase_verify(bootstrap_state_t *state) {
 /**
  * Bootstrap state 3: (Erase/)Program loop.
  *
- * @param state Bootstrap state.
+ * @param[in,out] ctx State machine context.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
+static rom_error_t bootstrap_handle_program(bootstrap_ctx_t *ctx) {
   static_assert(alignof(spi_device_cmd_t) >= sizeof(uint32_t) &&
                     offsetof(spi_device_cmd_t, payload) >= sizeof(uint32_t),
                 "Payload must be word aligned.");
@@ -289,7 +383,7 @@ static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
           0,
       "Payload size must be a multiple of flash word size.");
 
-  HARDENED_CHECK_EQ(*state, kBootstrapStateProgram);
+  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateProgram);
 
   spi_device_cmd_t cmd;
   RETURN_IF_ERROR(spi_device_cmd_get(&cmd));
@@ -302,14 +396,14 @@ static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
   rom_error_t error = kErrorUnknown;
   switch (cmd.opcode) {
     case kSpiDeviceOpcodeChipErase:
-      error = bootstrap_chip_erase();
+      error = bootstrap_chip_erase(ctx->bounds_checks_on);
       break;
     case kSpiDeviceOpcodeSectorErase:
-      error = bootstrap_sector_erase(cmd.address);
+      error = bootstrap_sector_erase(cmd.address, ctx->bounds_checks_on);
       break;
     case kSpiDeviceOpcodePageProgram:
       error = bootstrap_page_program(cmd.address, cmd.payload_byte_count,
-                                     cmd.payload);
+                                     cmd.payload, ctx->bounds_checks_on);
       break;
     case kSpiDeviceOpcodeReset:
       rstmgr_reset();
@@ -333,28 +427,29 @@ static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
   return error;
 }
 
-rom_error_t enter_bootstrap(hardened_bool_t protect_rom_ext) {
-  // TODO(lowRISC/opentitan#19151): Implement `protect_rom_ext` behavior.
-  HARDENED_CHECK_EQ(protect_rom_ext, kHardenedBoolFalse);
-
+rom_error_t enter_bootstrap(hardened_bool_t bounds_checks_on) {
   spi_device_init();
 
   // Bootstrap event loop.
-  bootstrap_state_t state = kBootstrapStateErase;
+  bootstrap_ctx_t ctx = {
+      .state = kBootstrapStateErase,
+      .bounds_checks_on = bounds_checks_on,
+  };
+
   rom_error_t error = kErrorUnknown;
   while (true) {
-    switch (launder32(state)) {
+    switch (launder32(ctx.state)) {
       case kBootstrapStateErase:
-        HARDENED_CHECK_EQ(state, kBootstrapStateErase);
-        error = bootstrap_handle_erase(&state);
+        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateErase);
+        error = bootstrap_handle_erase(&ctx);
         break;
       case kBootstrapStateEraseVerify:
-        HARDENED_CHECK_EQ(state, kBootstrapStateEraseVerify);
-        error = bootstrap_handle_erase_verify(&state);
+        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateEraseVerify);
+        error = bootstrap_handle_erase_verify(&ctx);
         break;
       case kBootstrapStateProgram:
-        HARDENED_CHECK_EQ(state, kBootstrapStateProgram);
-        error = bootstrap_handle_program(&state);
+        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateProgram);
+        error = bootstrap_handle_program(&ctx);
         break;
       default:
         error = kErrorBootstrapInvalidState;
