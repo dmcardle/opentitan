@@ -18,39 +18,90 @@
 #include "flash_ctrl_regs.h"
 #include "hw/ip/otp_ctrl/data/otp_ctrl_regs.h"
 
+// TODO(dmcardle) Configure flash memory protection to prevent overwriting
+// ROM_EXT in slot A or slot B
+
+enum {
+  /*
+   * Maximum flash address, exclusive.
+   */
+  kMaxAddress =
+      FLASH_CTRL_PARAM_BYTES_PER_BANK * FLASH_CTRL_PARAM_REG_NUM_BANKS,
+  /*
+   * The total number of flash pages.
+   */
+  kNumPages = kMaxAddress / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
+
+  kFirstPage = CHIP_ROM_EXT_SIZE_MAX / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
+};
+
 // This function implements the prototype declared by
 // sw/device/silicon_creator/lib/bootstrap.h
-hardened_bool_t bootstrap_bounds_check(spi_device_opcode_t opcode,
-                                       uint32_t page_addr) {
-  static_assert(CHIP_ROM_EXT_SIZE_MAX % FLASH_CTRL_PARAM_BYTES_PER_PAGE == 0,
-                "CHIP_ROM_EXT_SIZE_MAX must be aligned to flash page boundary");
 
-  switch (opcode) {
-    case kSpiDeviceOpcodeChipErase:
-    case kSpiDeviceOpcodeSectorErase:
-      // Check whether `page_addr` lies within slot A, but outside of ROM_EXT.
-      if (page_addr >= CHIP_ROM_EXT_SIZE_MAX &&
-          page_addr < FLASH_CTRL_PARAM_BYTES_PER_BANK) {
-        return kHardenedBoolTrue;
-      }
-      // Check whether `page_addr` lies within slot B, but outside of ROM_EXT.
-      if (page_addr >=
-              FLASH_CTRL_PARAM_BYTES_PER_BANK + CHIP_ROM_EXT_SIZE_MAX &&
-          page_addr < 2 * FLASH_CTRL_PARAM_BYTES_PER_BANK) {
-        return kHardenedBoolTrue;
-      }
-      break;
-    case kSpiDeviceOpcodePageProgram:
-      // Check whether `page_addr` lies within slot A, but outside of ROM_EXT.
-      if (page_addr >= CHIP_ROM_EXT_SIZE_MAX &&
-          page_addr < FLASH_CTRL_PARAM_BYTES_PER_BANK) {
-        return kHardenedBoolTrue;
-      }
-      break;
-    default:
-      return kHardenedBoolFalse;
+rom_error_t bootstrap_chip_erase(void) {
+  // Bounds checks are defined at the granularity of pages, so we check
+  // whether individual pages are safe to erase rather than erasing entire
+  // banks at a time.
+  flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
+  rom_error_t last_err = kErrorOk;
+  for (uint32_t i = kFirstPage; i < kNumPages; ++i) {
+    const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+    rom_error_t err = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
+    if (err != kErrorOk) {
+      last_err = err;
+    }
   }
-  return kHardenedBoolFalse;
+  flash_ctrl_bank_erase_perms_set(kHardenedBoolFalse);
+  HARDENED_RETURN_IF_ERROR(last_err);
+  return kErrorOk;
+}
+
+rom_error_t bootstrap_sector_erase(uint32_t addr) {
+  static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
+                "Page size must be 2 KiB");
+  enum {
+    /**
+     * Mask for truncating `addr` to the lower 4 KiB aligned address.
+     */
+    kPageAddrMask = ~UINT32_C(4096) + 1,
+  };
+
+  if (addr >= kMaxAddress) {
+    return kErrorBootstrapEraseAddress;
+  }
+  addr &= kPageAddrMask;
+
+  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
+      .read = kMultiBitBool4False,
+      .write = kMultiBitBool4False,
+      .erase = kMultiBitBool4True,
+  });
+  rom_error_t err_0 = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
+  rom_error_t err_1 = flash_ctrl_data_erase(
+      addr + FLASH_CTRL_PARAM_BYTES_PER_PAGE, kFlashCtrlEraseTypePage);
+  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
+      .read = kMultiBitBool4False,
+      .write = kMultiBitBool4False,
+      .erase = kMultiBitBool4False,
+  });
+
+  HARDENED_RETURN_IF_ERROR(err_0);
+  return err_1;
+}
+
+rom_error_t bootstrap_erase_verify(void) {
+  rom_error_t last_err = kErrorOk;
+  for (uint32_t i = kFirstPage; i < kNumPages; ++i) {
+    const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+    rom_error_t err =
+        flash_ctrl_data_erase_verify(addr, kFlashCtrlEraseTypePage);
+    if (err != kErrorOk) {
+      last_err = err;
+    }
+  }
+
+  HARDENED_RETURN_IF_ERROR(last_err);
+  return last_err;
 }
 
 hardened_bool_t rom_ext_bootstrap_enabled(void) {

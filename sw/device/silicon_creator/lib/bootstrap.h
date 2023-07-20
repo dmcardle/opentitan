@@ -14,20 +14,48 @@
 extern "C" {
 #endif
 
+extern const hardened_bool_t kProtectRomExt;
+
 /**
- * Determines whether the given SPI opcode is allowed to operate on the given
- * page.
+ * Handles access permissions and erases both data banks of the embedded flash.
  *
  * NOTE: Code that depends on this library must provide an implementation of
  * this function.
  *
- * @param opcode The current SPI command's opcode.
- * @param addr The flash address in question.
- * @return Whether the address passes the bounds check.
+ * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-hardened_bool_t bootstrap_bounds_check(spi_device_opcode_t opcode,
-                                       uint32_t page_addr);
+rom_error_t bootstrap_chip_erase(void);
+
+/**
+ * Handles access permissions and erases a 4 KiB region in the data partition of
+ * the embedded flash.
+ *
+ * Since OpenTitan's flash page size is 2 KiB, this function erases two
+ * consecutive pages.
+ *
+ * NOTE: Code that depends on this library must provide an implementation of
+ * this function.
+ *
+ * @param addr Address that falls within the 4 KiB region being deleted.
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t bootstrap_sector_erase(uint32_t addr);
+
+/**
+ * Verify that all data banks have been erased.
+ *
+ * This function also clears the WIP and WEN bits of the flash status register.
+ *
+ * NOTE: Code that depends on this library must provide an implementation of
+ * this function.
+ *
+ * @param[in,out] ctx State machine context.
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t bootstrap_erase_verify(void);
 
 /**
  * Enters flash programming mode. This function initializes the SPI device and

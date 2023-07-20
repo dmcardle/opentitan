@@ -74,107 +74,6 @@ typedef struct bootstrap_ctx {
 } bootstrap_ctx_t;
 
 /**
- * Handles access permissions and erases both data banks of the embedded flash.
- *
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_chip_erase(hardened_bool_t bounds_checks_on) {
-  if (bounds_checks_on == kHardenedBoolTrue) {
-    // Bounds checks are defined at the granularity of pages, so we check
-    // whether individual pages are safe to erase rather than erasing entire
-    // banks at a time.
-    flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
-    rom_error_t last_err = kErrorOk;
-    for (uint32_t i = 0; i < kNumPages; ++i) {
-      const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
-      const hardened_bool_t is_addr_ok =
-          bootstrap_bounds_check(kSpiDeviceOpcodeChipErase, addr);
-      if (is_addr_ok != kHardenedBoolTrue) {
-        continue;
-      }
-      HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
-      rom_error_t err = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
-      if (err != kErrorOk) {
-        last_err = err;
-      }
-    }
-    flash_ctrl_bank_erase_perms_set(kHardenedBoolFalse);
-    HARDENED_RETURN_IF_ERROR(last_err);
-    return kErrorOk;
-  }
-
-  HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
-
-  flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
-  rom_error_t err_0 = flash_ctrl_data_erase(0, kFlashCtrlEraseTypeBank);
-  rom_error_t err_1 = flash_ctrl_data_erase(FLASH_CTRL_PARAM_BYTES_PER_BANK,
-                                            kFlashCtrlEraseTypeBank);
-  flash_ctrl_bank_erase_perms_set(kHardenedBoolFalse);
-
-  HARDENED_RETURN_IF_ERROR(err_0);
-  return err_1;
-}
-
-/**
- * Handles access permissions and erases a 4 KiB region in the data partition of
- * the embedded flash.
- *
- * Since OpenTitan's flash page size is 2 KiB, this function erases two
- * consecutive pages.
- *
- * @param addr Address that falls within the 4 KiB region being deleted.
- * @param bounds_checks_on Determines whether to erase single pages at a time,
- * consulting `bootstrap_bounds_check()` for each page.
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_sector_erase(uint32_t addr,
-                                          hardened_bool_t bounds_checks_on) {
-  static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
-                "Page size must be 2 KiB");
-  enum {
-    /**
-     * Mask for truncating `addr` to the lower 4 KiB aligned address.
-     */
-    kPageAddrMask = ~UINT32_C(4096) + 1,
-  };
-
-  if (addr >= kMaxAddress) {
-    return kErrorBootstrapEraseAddress;
-  }
-  addr &= kPageAddrMask;
-
-  if (bounds_checks_on == kHardenedBoolTrue) {
-    const hardened_bool_t is_addr_ok =
-        bootstrap_bounds_check(kSpiDeviceOpcodeSectorErase, addr);
-    if (is_addr_ok != kHardenedBoolTrue) {
-      return kErrorBootstrapIllegalAddr;
-    }
-    HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
-  } else {
-    HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
-  }
-
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4True,
-  });
-  rom_error_t err_0 = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
-  rom_error_t err_1 = flash_ctrl_data_erase(
-      addr + FLASH_CTRL_PARAM_BYTES_PER_PAGE, kFlashCtrlEraseTypePage);
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4False,
-  });
-
-  HARDENED_RETURN_IF_ERROR(err_0);
-  return err_1;
-}
-
-/**
  * Handles access permissions and programs up to 256 bytes of flash memory
  * starting at `addr`.
  *
@@ -187,14 +86,11 @@ static rom_error_t bootstrap_sector_erase(uint32_t addr,
  * @param data Data to write, must be word aligned. If `byte_count` is not a
  * multiple of flash word size, `data` must have enough space until the next
  * flash word.
- * @param bounds_checks_on Determines whether to operate on single pages at a
- * time, consulting `bootstrap_bounds_check()` for each page.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
 static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
-                                          uint8_t *data,
-                                          hardened_bool_t bounds_checks_on) {
+                                          uint8_t *data) {
   static_assert(__builtin_popcount(FLASH_CTRL_PARAM_BYTES_PER_WORD) == 1,
                 "Bytes per flash word must be a power of two.");
   enum {
@@ -219,16 +115,7 @@ static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
     return kErrorBootstrapProgramAddress;
   }
 
-  if (bounds_checks_on == kHardenedBoolTrue) {
-    const hardened_bool_t is_addr_ok =
-        bootstrap_bounds_check(kSpiDeviceOpcodePageProgram, addr);
-    if (is_addr_ok != kHardenedBoolTrue) {
-      return kErrorBootstrapIllegalAddr;
-    }
-    HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
-  } else {
-    HARDENED_CHECK_EQ(bounds_checks_on, kHardenedBoolFalse);
-  }
+  // TODO(dmcardle) Configure flash MP to prevent overwriting ROM_EXT
 
   // Round up to next flash word and fill missing bytes with `0xff`.
   size_t flash_word_misalignment = byte_count & kFlashWordMask;
@@ -302,7 +189,7 @@ static rom_error_t bootstrap_handle_erase(bootstrap_ctx_t *ctx) {
   switch (cmd.opcode) {
     case kSpiDeviceOpcodeChipErase:
     case kSpiDeviceOpcodeSectorErase:
-      error = bootstrap_chip_erase(ctx->bounds_checks_on);
+      error = bootstrap_chip_erase();
       HARDENED_RETURN_IF_ERROR(error);
       ctx->state = kBootstrapStateEraseVerify;
       // Note: We clear WIP and WEN bits in `bootstrap_handle_erase_verify()`
@@ -330,41 +217,11 @@ OT_WARN_UNUSED_RESULT
 static rom_error_t bootstrap_handle_erase_verify(bootstrap_ctx_t *ctx) {
   HARDENED_CHECK_EQ(ctx->state, kBootstrapStateEraseVerify);
 
-  if (ctx->bounds_checks_on == kHardenedBoolTrue) {
-    rom_error_t last_err = kErrorOk;
-    for (uint32_t i = 0; i < kNumPages; ++i) {
-      const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
-      const hardened_bool_t is_addr_ok =
-          bootstrap_bounds_check(kSpiDeviceOpcodeChipErase, addr);
-      if (is_addr_ok != kHardenedBoolTrue) {
-        continue;
-      }
-      HARDENED_CHECK_EQ(is_addr_ok, kHardenedBoolTrue);
-      rom_error_t err =
-          flash_ctrl_data_erase_verify(addr, kFlashCtrlEraseTypePage);
-      if (err != kErrorOk) {
-        last_err = err;
-      }
-    }
-
-    ctx->state = kBootstrapStateProgram;
-    spi_device_flash_status_clear();
-
-    HARDENED_RETURN_IF_ERROR(last_err);
-    return last_err;
-  }
-
-  HARDENED_CHECK_EQ(ctx->bounds_checks_on, kHardenedBoolFalse);
-
-  rom_error_t err_0 = flash_ctrl_data_erase_verify(0, kFlashCtrlEraseTypeBank);
-  rom_error_t err_1 = flash_ctrl_data_erase_verify(
-      FLASH_CTRL_PARAM_BYTES_PER_BANK, kFlashCtrlEraseTypeBank);
-  HARDENED_RETURN_IF_ERROR(err_0);
-  HARDENED_RETURN_IF_ERROR(err_1);
+  const rom_error_t err = bootstrap_erase_verify();
+  HARDENED_RETURN_IF_ERROR(err);
 
   ctx->state = kBootstrapStateProgram;
-  spi_device_flash_status_clear();
-  return err_0;
+  return err;
 }
 
 /**
@@ -396,14 +253,14 @@ static rom_error_t bootstrap_handle_program(bootstrap_ctx_t *ctx) {
   rom_error_t error = kErrorUnknown;
   switch (cmd.opcode) {
     case kSpiDeviceOpcodeChipErase:
-      error = bootstrap_chip_erase(ctx->bounds_checks_on);
+      error = bootstrap_chip_erase();
       break;
     case kSpiDeviceOpcodeSectorErase:
-      error = bootstrap_sector_erase(cmd.address, ctx->bounds_checks_on);
+      error = bootstrap_sector_erase(cmd.address);
       break;
     case kSpiDeviceOpcodePageProgram:
       error = bootstrap_page_program(cmd.address, cmd.payload_byte_count,
-                                     cmd.payload, ctx->bounds_checks_on);
+                                     cmd.payload);
       break;
     case kSpiDeviceOpcodeReset:
       rstmgr_reset();
