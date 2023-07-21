@@ -183,7 +183,7 @@ enum {
 };
 
 /**
- * Kicks of the initialization of the flash controller.
+ * Kicks off the initialization of the flash controller.
  *
  * This must complete before flash can be accessed. The init status can be
  * queried by calling `flash_ctrl_status_get()` and checking `init_wip`.
@@ -443,6 +443,22 @@ typedef struct flash_ctrl_cfg {
  * @param cfg New configuration settings.
  */
 void flash_ctrl_data_default_cfg_set(flash_ctrl_cfg_t cfg);
+
+typedef uint32_t flash_ctrl_region_index_t;
+
+/**
+ * Prevent the given region of pages from being erased or programmed.
+ *
+ * This function takes over `MP_REGION_0` and `MP_REGION_CFG_0` to prevent the
+ * given range of pages from being overwritten.
+ *
+ * @param page_offset The index of the first page in the region to protect.
+ * @param num_pages The number of pages in the region to protect.
+ */
+void flash_ctrl_data_region_protect(uint32_t page_offset, uint32_t num_pages,
+                                    flash_ctrl_region_index_t region,
+                                    multi_bit_bool_t erase_enabled,
+                                    multi_bit_bool_t prog_enabled);
 
 /**
  * Sets configuration settings for an info page.

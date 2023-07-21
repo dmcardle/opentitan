@@ -322,7 +322,7 @@ static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
   return error;
 }
 
-rom_error_t enter_bootstrap() {
+rom_error_t enter_bootstrap(void) {
   spi_device_init();
 
   // Bootstrap event loop.

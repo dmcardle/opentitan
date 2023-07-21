@@ -142,8 +142,8 @@ rom_error_t rom_ext_bootstrap(void) {
   }
   HARDENED_CHECK_EQ(enabled, kHardenedBoolTrue);
 
-// TODO(dmcardle) Configure flash memory protection to prevent overwriting
-// ROM_EXT in slot A or slot B
+  // TODO(dmcardle) Configure flash memory protection to prevent overwriting
+  // ROM_EXT in slot A or slot B
 
   return enter_bootstrap();
 }
