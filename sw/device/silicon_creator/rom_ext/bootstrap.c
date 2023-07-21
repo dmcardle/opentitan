@@ -12,7 +12,6 @@
 #include "sw/device/silicon_creator/lib/drivers/flash_ctrl.h"
 #include "sw/device/silicon_creator/lib/drivers/otp.h"
 #include "sw/device/silicon_creator/lib/drivers/rstmgr.h"
-#include "sw/device/silicon_creator/lib/drivers/spi_device.h"
 #include "sw/device/silicon_creator/lib/error.h"
 
 #include "flash_ctrl_regs.h"
@@ -32,11 +31,46 @@ enum {
    */
   kNumPages = kMaxAddress / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
 
-  kFirstPage = CHIP_ROM_EXT_SIZE_MAX / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
+  // Let's say each page is 4 bytes and the ROM_EXT size is 16 bytes. By this
+  // math, (16 / 4), the ROM_EXT is 4 pages. The size nicely happens to name the
+  // index of the page immediately following the ROM_EXT.
+  kPageAfterRomExtSlotA =
+      CHIP_ROM_EXT_SIZE_MAX / FLASH_CTRL_PARAM_BYTES_PER_PAGE,
+  kPageAfterRomExtSlotB = kPageAfterRomExtSlotA + kNumPages / 2,
 };
 
-// This function implements the prototype declared by
-// sw/device/silicon_creator/lib/bootstrap.h
+hardened_bool_t bootstrap_bounds_check(spi_device_opcode_t opcode,
+                                       uint32_t page_addr) {
+  static_assert(CHIP_ROM_EXT_SIZE_MAX % FLASH_CTRL_PARAM_BYTES_PER_PAGE == 0,
+                "CHIP_ROM_EXT_SIZE_MAX must be aligned to flash page boundary");
+
+  switch (opcode) {
+    case kSpiDeviceOpcodeChipErase:
+    case kSpiDeviceOpcodeSectorErase:
+      // Check whether `page_addr` lies within slot A, but outside of ROM_EXT.
+      if (page_addr >= CHIP_ROM_EXT_SIZE_MAX &&
+          page_addr < FLASH_CTRL_PARAM_BYTES_PER_BANK) {
+        return kHardenedBoolTrue;
+      }
+      // Check whether `page_addr` lies within slot B, but outside of ROM_EXT.
+      if (page_addr >=
+              FLASH_CTRL_PARAM_BYTES_PER_BANK + CHIP_ROM_EXT_SIZE_MAX &&
+          page_addr < 2 * FLASH_CTRL_PARAM_BYTES_PER_BANK) {
+        return kHardenedBoolTrue;
+      }
+      break;
+    case kSpiDeviceOpcodePageProgram:
+      // Check whether `page_addr` lies within slot A, but outside of ROM_EXT.
+      if (page_addr >= CHIP_ROM_EXT_SIZE_MAX &&
+          page_addr < FLASH_CTRL_PARAM_BYTES_PER_BANK) {
+        return kHardenedBoolTrue;
+      }
+      break;
+    default:
+      return kHardenedBoolFalse;
+  }
+  return kHardenedBoolFalse;
+}
 
 rom_error_t bootstrap_chip_erase(void) {
   // Bounds checks are defined at the granularity of pages, so we check
@@ -44,8 +78,15 @@ rom_error_t bootstrap_chip_erase(void) {
   // banks at a time.
   flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
   rom_error_t last_err = kErrorOk;
-  for (uint32_t i = kFirstPage; i < kNumPages; ++i) {
+
+  for (uint32_t i = 0; i < kNumPages; ++i) {
     const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+    // Do not erase this page if it lies within ROM_EXT on either slot.
+    if (addr < CHIP_ROM_EXT_SIZE_MAX ||
+        (addr >= FLASH_CTRL_PARAM_BYTES_PER_BANK &&
+         addr < FLASH_CTRL_PARAM_BYTES_PER_BANK + CHIP_ROM_EXT_SIZE_MAX)) {
+      continue;
+    }
     rom_error_t err = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
     if (err != kErrorOk) {
       last_err = err;
@@ -91,15 +132,20 @@ rom_error_t bootstrap_sector_erase(uint32_t addr) {
 
 rom_error_t bootstrap_erase_verify(void) {
   rom_error_t last_err = kErrorOk;
-  for (uint32_t i = kFirstPage; i < kNumPages; ++i) {
+  for (uint32_t i = 0; i < kNumPages; ++i) {
     const uint32_t addr = i * FLASH_CTRL_PARAM_BYTES_PER_PAGE;
+    // Do not verify this page if it lies within ROM_EXT on either slot.
+    if (addr < CHIP_ROM_EXT_SIZE_MAX ||
+        (addr >= FLASH_CTRL_PARAM_BYTES_PER_BANK &&
+         addr < FLASH_CTRL_PARAM_BYTES_PER_BANK + CHIP_ROM_EXT_SIZE_MAX)) {
+      continue;
+    }
     rom_error_t err =
         flash_ctrl_data_erase_verify(addr, kFlashCtrlEraseTypePage);
     if (err != kErrorOk) {
       last_err = err;
     }
   }
-
   HARDENED_RETURN_IF_ERROR(last_err);
   return last_err;
 }
@@ -130,5 +176,5 @@ rom_error_t rom_ext_bootstrap(void) {
   }
   HARDENED_CHECK_EQ(enabled, kHardenedBoolTrue);
 
-  return enter_bootstrap(/*enable_bounds_checks=*/kHardenedBoolTrue);
+  return enter_bootstrap();
 }

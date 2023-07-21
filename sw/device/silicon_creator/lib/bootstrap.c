@@ -66,14 +66,6 @@ typedef enum bootstrap_state {
 } bootstrap_state_t;
 
 /**
- * A context object for the bootstrap state machine.
- */
-typedef struct bootstrap_ctx {
-  bootstrap_state_t state;
-  hardened_bool_t bounds_checks_on;
-} bootstrap_ctx_t;
-
-/**
  * Handles access permissions and programs up to 256 bytes of flash memory
  * starting at `addr`.
  *
@@ -171,12 +163,12 @@ static rom_error_t bootstrap_page_program(uint32_t addr, size_t byte_count,
  * This function erases both data banks of the flash regardless of the type of
  * the erase command (CHIP_ERASE or SECTOR_ERASE).
  *
- * @param[in,out] ctx State machine context.
+ * @param state Bootstrap state.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_erase(bootstrap_ctx_t *ctx) {
-  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateErase);
+static rom_error_t bootstrap_handle_erase(bootstrap_state_t *state) {
+  HARDENED_CHECK_EQ(*state, kBootstrapStateErase);
 
   spi_device_cmd_t cmd;
   RETURN_IF_ERROR(spi_device_cmd_get(&cmd));
@@ -191,7 +183,7 @@ static rom_error_t bootstrap_handle_erase(bootstrap_ctx_t *ctx) {
     case kSpiDeviceOpcodeSectorErase:
       error = bootstrap_chip_erase();
       HARDENED_RETURN_IF_ERROR(error);
-      ctx->state = kBootstrapStateEraseVerify;
+      *state = kBootstrapStateEraseVerify;
       // Note: We clear WIP and WEN bits in `bootstrap_handle_erase_verify()`
       // after checking that both data banks have been erased.
       break;
@@ -210,28 +202,30 @@ static rom_error_t bootstrap_handle_erase(bootstrap_ctx_t *ctx) {
  *
  * This function also clears the WIP and WEN bits of the flash status register.
  *
- * @param[in,out] ctx State machine context.
+ * @param state Bootstrap state.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_erase_verify(bootstrap_ctx_t *ctx) {
-  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateEraseVerify);
+static rom_error_t bootstrap_handle_erase_verify(bootstrap_state_t *state) {
+  HARDENED_CHECK_EQ(*state, kBootstrapStateEraseVerify);
 
   const rom_error_t err = bootstrap_erase_verify();
   HARDENED_RETURN_IF_ERROR(err);
 
-  ctx->state = kBootstrapStateProgram;
+  spi_device_flash_status_clear();
+
+  *state = kBootstrapStateProgram;
   return err;
 }
 
 /**
  * Bootstrap state 3: (Erase/)Program loop.
  *
- * @param[in,out] ctx State machine context.
+ * @param state Bootstrap state.
  * @return Result of the operation.
  */
 OT_WARN_UNUSED_RESULT
-static rom_error_t bootstrap_handle_program(bootstrap_ctx_t *ctx) {
+static rom_error_t bootstrap_handle_program(bootstrap_state_t *state) {
   static_assert(alignof(spi_device_cmd_t) >= sizeof(uint32_t) &&
                     offsetof(spi_device_cmd_t, payload) >= sizeof(uint32_t),
                 "Payload must be word aligned.");
@@ -240,7 +234,7 @@ static rom_error_t bootstrap_handle_program(bootstrap_ctx_t *ctx) {
           0,
       "Payload size must be a multiple of flash word size.");
 
-  HARDENED_CHECK_EQ(ctx->state, kBootstrapStateProgram);
+  HARDENED_CHECK_EQ(*state, kBootstrapStateProgram);
 
   spi_device_cmd_t cmd;
   RETURN_IF_ERROR(spi_device_cmd_get(&cmd));
@@ -284,29 +278,25 @@ static rom_error_t bootstrap_handle_program(bootstrap_ctx_t *ctx) {
   return error;
 }
 
-rom_error_t enter_bootstrap(hardened_bool_t bounds_checks_on) {
+rom_error_t enter_bootstrap() {
   spi_device_init();
 
   // Bootstrap event loop.
-  bootstrap_ctx_t ctx = {
-      .state = kBootstrapStateErase,
-      .bounds_checks_on = bounds_checks_on,
-  };
-
+  bootstrap_state_t state = kBootstrapStateErase;
   rom_error_t error = kErrorUnknown;
   while (true) {
-    switch (launder32(ctx.state)) {
+    switch (launder32(state)) {
       case kBootstrapStateErase:
-        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateErase);
-        error = bootstrap_handle_erase(&ctx);
+        HARDENED_CHECK_EQ(state, kBootstrapStateErase);
+        error = bootstrap_handle_erase(&state);
         break;
       case kBootstrapStateEraseVerify:
-        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateEraseVerify);
-        error = bootstrap_handle_erase_verify(&ctx);
+        HARDENED_CHECK_EQ(state, kBootstrapStateEraseVerify);
+        error = bootstrap_handle_erase_verify(&state);
         break;
       case kBootstrapStateProgram:
-        HARDENED_CHECK_EQ(ctx.state, kBootstrapStateProgram);
-        error = bootstrap_handle_program(&ctx);
+        HARDENED_CHECK_EQ(state, kBootstrapStateProgram);
+        error = bootstrap_handle_program(&state);
         break;
       default:
         error = kErrorBootstrapInvalidState;

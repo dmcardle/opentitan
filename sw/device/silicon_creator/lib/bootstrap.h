@@ -14,52 +14,15 @@
 extern "C" {
 #endif
 
-extern const hardened_bool_t kProtectRomExt;
-
-/**
- * Handles access permissions and erases both data banks of the embedded flash.
- *
- * NOTE: Code that depends on this library must provide an implementation of
- * this function.
- *
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-rom_error_t bootstrap_chip_erase(void);
-
-/**
- * Handles access permissions and erases a 4 KiB region in the data partition of
- * the embedded flash.
- *
- * Since OpenTitan's flash page size is 2 KiB, this function erases two
- * consecutive pages.
- *
- * NOTE: Code that depends on this library must provide an implementation of
- * this function.
- *
- * @param addr Address that falls within the 4 KiB region being deleted.
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-rom_error_t bootstrap_sector_erase(uint32_t addr);
-
-/**
- * Verify that all data banks have been erased.
- *
- * This function also clears the WIP and WEN bits of the flash status register.
- *
- * NOTE: Code that depends on this library must provide an implementation of
- * this function.
- *
- * @param[in,out] ctx State machine context.
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-rom_error_t bootstrap_erase_verify(void);
-
 /**
  * Enters flash programming mode. This function initializes the SPI device and
  * uses incoming SPI commands to drive an internal state machine.
+ *
+ * Dependent code should use this function as the main entry point to bootstrap.
+ * The dependent code must provide implementations for the following functions:
+ *   - `bootstrap_chip_erase()`
+ *   - `bootstrap_sector_erase()`
+ *   - `bootstrap_erase_verify()`
  *
  * Bootstrapping uses the typical SPI flash EEPROM commands. A typical session
  * involves:
@@ -78,7 +41,48 @@ rom_error_t bootstrap_erase_verify(void);
  * @return The result of the flash loop.
  */
 OT_WARN_UNUSED_RESULT
-rom_error_t enter_bootstrap(hardened_bool_t enable_bounds_checks);
+rom_error_t enter_bootstrap(void);
+
+/**
+ * @private @pure
+ * Handles access permissions and erases both data banks of the embedded flash.
+ *
+ * NOTE: This abstract function must be implemented by dependent code.
+ *
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t bootstrap_chip_erase(void);
+
+/**
+ * @private @pure
+ * Handles access permissions and erases a 4 KiB region in the data partition of
+ * the embedded flash.
+ *
+ * Since OpenTitan's flash page size is 2 KiB, this function erases two
+ * consecutive pages.
+ *
+ * NOTE: This abstract function must be implemented by dependent code.
+ *
+ * @param addr Address that falls within the 4 KiB region being deleted.
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t bootstrap_sector_erase(uint32_t addr);
+
+/**
+ * @private @pure
+ * Verify that all data banks have been erased.
+ *
+ * This function also clears the WIP and WEN bits of the flash status register.
+ *
+ * NOTE: This abstract function must be implemented by dependent code.
+ *
+ * @param[in,out] ctx State machine context.
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+rom_error_t bootstrap_erase_verify(void);
 
 #ifdef __cplusplus
 }

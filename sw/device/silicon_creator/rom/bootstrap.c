@@ -24,9 +24,6 @@ enum {
       FLASH_CTRL_PARAM_BYTES_PER_BANK * FLASH_CTRL_PARAM_REG_NUM_BANKS,
 };
 
-// This function implements the prototype declared by
-// sw/device/silicon_creator/lib/bootstrap.h
-
 rom_error_t bootstrap_chip_erase(void) {
   flash_ctrl_bank_erase_perms_set(kHardenedBoolTrue);
   rom_error_t err_0 = flash_ctrl_data_erase(0, kFlashCtrlEraseTypeBank);
@@ -77,8 +74,6 @@ rom_error_t bootstrap_erase_verify(void) {
       FLASH_CTRL_PARAM_BYTES_PER_BANK, kFlashCtrlEraseTypeBank);
   HARDENED_RETURN_IF_ERROR(err_0);
   HARDENED_RETURN_IF_ERROR(err_1);
-
-  spi_device_flash_status_clear();
   return err_0;
 }
 
@@ -110,5 +105,5 @@ rom_error_t bootstrap(void) {
   }
   HARDENED_CHECK_EQ(requested, kHardenedBoolTrue);
 
-  return enter_bootstrap(/*enable_bounds_checks=*/kHardenedBoolFalse);
+  return enter_bootstrap();
 }

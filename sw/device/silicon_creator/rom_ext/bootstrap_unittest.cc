@@ -78,9 +78,9 @@ class OffsetRegion {
 class FlashCtrlSim {
  public:
   enum FlashByte : char {
-    kDefault = 0x11,
-    kErased = 0x22,
-    kErasedVerified = 0x33,
+    kDefault = 'd',
+    kErased = 'e',
+    kErasedVerified = 'v',
   };
 
   FlashCtrlSim() : memory_(flash_size(), FlashByte::kDefault) {}
