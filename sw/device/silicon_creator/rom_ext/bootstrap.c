@@ -17,9 +17,6 @@
 #include "flash_ctrl_regs.h"
 #include "hw/ip/otp_ctrl/data/otp_ctrl_regs.h"
 
-// TODO(dmcardle) Configure flash memory protection to prevent overwriting
-// ROM_EXT in slot A or slot B
-
 enum {
   /*
    * Maximum flash address, exclusive.
@@ -39,6 +36,8 @@ enum {
   kPageAfterRomExtSlotB = kPageAfterRomExtSlotA + kNumPages / 2,
 };
 
+// TODO(dmcardle) Delete this dead code
+//
 hardened_bool_t bootstrap_bounds_check(spi_device_opcode_t opcode,
                                        uint32_t page_addr) {
   static_assert(CHIP_ROM_EXT_SIZE_MAX % FLASH_CTRL_PARAM_BYTES_PER_PAGE == 0,
@@ -97,39 +96,6 @@ rom_error_t bootstrap_chip_erase(void) {
   return kErrorOk;
 }
 
-rom_error_t bootstrap_sector_erase(uint32_t addr) {
-  static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
-                "Page size must be 2 KiB");
-  enum {
-    /**
-     * Mask for truncating `addr` to the lower 4 KiB aligned address.
-     */
-    kPageAddrMask = ~UINT32_C(4096) + 1,
-  };
-
-  if (addr >= kMaxAddress) {
-    return kErrorBootstrapEraseAddress;
-  }
-  addr &= kPageAddrMask;
-
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4True,
-  });
-  rom_error_t err_0 = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
-  rom_error_t err_1 = flash_ctrl_data_erase(
-      addr + FLASH_CTRL_PARAM_BYTES_PER_PAGE, kFlashCtrlEraseTypePage);
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4False,
-  });
-
-  HARDENED_RETURN_IF_ERROR(err_0);
-  return err_1;
-}
-
 rom_error_t bootstrap_erase_verify(void) {
   rom_error_t last_err = kErrorOk;
   for (uint32_t i = 0; i < kNumPages; ++i) {
@@ -175,6 +141,9 @@ rom_error_t rom_ext_bootstrap(void) {
     return kErrorBootstrapDisabledRomExt;
   }
   HARDENED_CHECK_EQ(enabled, kHardenedBoolTrue);
+
+// TODO(dmcardle) Configure flash memory protection to prevent overwriting
+// ROM_EXT in slot A or slot B
 
   return enter_bootstrap();
 }

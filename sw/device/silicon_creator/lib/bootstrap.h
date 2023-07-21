@@ -15,13 +15,13 @@ extern "C" {
 #endif
 
 /**
+ * @public
  * Enters flash programming mode. This function initializes the SPI device and
  * uses incoming SPI commands to drive an internal state machine.
  *
  * Dependent code should use this function as the main entry point to bootstrap.
  * The dependent code must provide implementations for the following functions:
  *   - `bootstrap_chip_erase()`
- *   - `bootstrap_sector_erase()`
  *   - `bootstrap_erase_verify()`
  *
  * Bootstrapping uses the typical SPI flash EEPROM commands. A typical session
@@ -53,22 +53,6 @@ rom_error_t enter_bootstrap(void);
  */
 OT_WARN_UNUSED_RESULT
 rom_error_t bootstrap_chip_erase(void);
-
-/**
- * @private @pure
- * Handles access permissions and erases a 4 KiB region in the data partition of
- * the embedded flash.
- *
- * Since OpenTitan's flash page size is 2 KiB, this function erases two
- * consecutive pages.
- *
- * NOTE: This abstract function must be implemented by dependent code.
- *
- * @param addr Address that falls within the 4 KiB region being deleted.
- * @return Result of the operation.
- */
-OT_WARN_UNUSED_RESULT
-rom_error_t bootstrap_sector_erase(uint32_t addr);
 
 /**
  * @private @pure

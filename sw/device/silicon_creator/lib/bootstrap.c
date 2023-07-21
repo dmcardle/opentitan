@@ -66,6 +66,50 @@ typedef enum bootstrap_state {
 } bootstrap_state_t;
 
 /**
+ * Handles access permissions and erases a 4 KiB region in the data partition of
+ * the embedded flash.
+ *
+ * Since OpenTitan's flash page size is 2 KiB, this function erases two
+ * consecutive pages.
+ *
+ * @param addr Address that falls within the 4 KiB region being deleted.
+ * @return Result of the operation.
+ */
+OT_WARN_UNUSED_RESULT
+static rom_error_t bootstrap_sector_erase(uint32_t addr) {
+  static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
+                "Page size must be 2 KiB");
+  enum {
+    /**
+     * Mask for truncating `addr` to the lower 4 KiB aligned address.
+     */
+    kPageAddrMask = ~UINT32_C(4096) + 1,
+  };
+
+  if (addr >= kMaxAddress) {
+    return kErrorBootstrapEraseAddress;
+  }
+  addr &= kPageAddrMask;
+
+  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
+      .read = kMultiBitBool4False,
+      .write = kMultiBitBool4False,
+      .erase = kMultiBitBool4True,
+  });
+  rom_error_t err_0 = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
+  rom_error_t err_1 = flash_ctrl_data_erase(
+      addr + FLASH_CTRL_PARAM_BYTES_PER_PAGE, kFlashCtrlEraseTypePage);
+  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
+      .read = kMultiBitBool4False,
+      .write = kMultiBitBool4False,
+      .erase = kMultiBitBool4False,
+  });
+
+  HARDENED_RETURN_IF_ERROR(err_0);
+  return err_1;
+}
+
+/**
  * Handles access permissions and programs up to 256 bytes of flash memory
  * starting at `addr`.
  *

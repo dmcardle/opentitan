@@ -35,39 +35,6 @@ rom_error_t bootstrap_chip_erase(void) {
   return err_1;
 }
 
-rom_error_t bootstrap_sector_erase(uint32_t addr) {
-  static_assert(FLASH_CTRL_PARAM_BYTES_PER_PAGE == 2048,
-                "Page size must be 2 KiB");
-  enum {
-    /**
-     * Mask for truncating `addr` to the lower 4 KiB aligned address.
-     */
-    kPageAddrMask = ~UINT32_C(4096) + 1,
-  };
-
-  if (addr >= kMaxAddress) {
-    return kErrorBootstrapEraseAddress;
-  }
-  addr &= kPageAddrMask;
-
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4True,
-  });
-  rom_error_t err_0 = flash_ctrl_data_erase(addr, kFlashCtrlEraseTypePage);
-  rom_error_t err_1 = flash_ctrl_data_erase(
-      addr + FLASH_CTRL_PARAM_BYTES_PER_PAGE, kFlashCtrlEraseTypePage);
-  flash_ctrl_data_default_perms_set((flash_ctrl_perms_t){
-      .read = kMultiBitBool4False,
-      .write = kMultiBitBool4False,
-      .erase = kMultiBitBool4False,
-  });
-
-  HARDENED_RETURN_IF_ERROR(err_0);
-  return err_1;
-}
-
 rom_error_t bootstrap_erase_verify(void) {
   rom_error_t err_0 = flash_ctrl_data_erase_verify(0, kFlashCtrlEraseTypeBank);
   rom_error_t err_1 = flash_ctrl_data_erase_verify(
