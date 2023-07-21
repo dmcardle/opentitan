@@ -455,8 +455,8 @@ typedef uint32_t flash_ctrl_region_index_t;
  * @param page_offset The index of the first page in the region to protect.
  * @param num_pages The number of pages in the region to protect.
  */
-void flash_ctrl_data_region_protect(uint32_t page_offset, uint32_t num_pages,
-                                    flash_ctrl_region_index_t region,
+void flash_ctrl_data_region_protect(flash_ctrl_region_index_t region,
+                                    uint32_t page_offset, uint32_t num_pages,
                                     multi_bit_bool_t erase_enabled,
                                     multi_bit_bool_t prog_enabled);
 

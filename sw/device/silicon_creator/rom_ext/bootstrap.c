@@ -142,8 +142,32 @@ rom_error_t rom_ext_bootstrap(void) {
   }
   HARDENED_CHECK_EQ(enabled, kHardenedBoolTrue);
 
-  // TODO(dmcardle) Configure flash memory protection to prevent overwriting
-  // ROM_EXT in slot A or slot B
+  enum {
+    kNumPagesInRomExt = CHIP_ROM_EXT_SIZE_MAX / FLASH_CTRL_PARAM_BYTES_PER_PAGE
+  };
+
+  static_assert(kNumPagesInRomExt < FLASH_CTRL_PARAM_REG_PAGES_PER_BANK);
+
+  // Disable erasing and programming of ROM_EXT in slot A.
+  flash_ctrl_data_region_protect(/*region=*/0, /*page_offset=*/0,
+                                 /*num_pages=*/kNumPagesInRomExt,
+                                 /*erase_enabled=*/kMultiBitBool4False,
+                                 /*prog_enabled=*/kMultiBitBool4False);
+
+  // Disable erasing and programming of ROM_EXT in slot B.
+  flash_ctrl_data_region_protect(
+      /*region=*/1, /*page_offset=*/FLASH_CTRL_PARAM_REG_PAGES_PER_BANK,
+      /*num_pages=*/kNumPagesInRomExt,
+      /*erase_enabled=*/kMultiBitBool4False,
+      /*prog_enabled=*/kMultiBitBool4False);
+
+  // Disable erasing of the second flash bank.
+  flash_ctrl_data_region_protect(
+      /*region=*/2,
+      /*page_offset=*/FLASH_CTRL_PARAM_REG_PAGES_PER_BANK + kNumPagesInRomExt,
+      /*num_pages=*/FLASH_CTRL_PARAM_REG_PAGES_PER_BANK - kNumPagesInRomExt,
+      /*erase_enabled=*/kMultiBitBool4False,
+      /*prog_enabled=*/kMultiBitBool4False);
 
   return enter_bootstrap();
 }

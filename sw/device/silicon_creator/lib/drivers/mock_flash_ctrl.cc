@@ -70,6 +70,14 @@ void flash_ctrl_info_cfg_set(const flash_ctrl_info_page_t *info_page,
   MockFlashCtrl::Instance().InfoCfgSet(info_page, cfg);
 }
 
+void flash_ctrl_data_region_protect(flash_ctrl_region_index_t region,
+                                    uint32_t page_offset, uint32_t num_pages,
+                                    multi_bit_bool_t erase_enabled,
+                                    multi_bit_bool_t prog_enabled) {
+  MockFlashCtrl::Instance().DataRegionProtect(region, page_offset, num_pages,
+                                              erase_enabled, prog_enabled);
+}
+
 void flash_ctrl_bank_erase_perms_set(hardened_bool_t enable) {
   MockFlashCtrl::Instance().BankErasePermsSet(enable);
 }
